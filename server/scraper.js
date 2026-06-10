@@ -5,7 +5,7 @@ async function extractContactInfo(url) {
     try {
         const { data } = await axios.get(url, { 
             timeout: 5000,
-            headers: { 'User-Agent': 'Mozilla/5.0' }
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' }
         });
         const $ = cheerio.load(data);
         const text = $('body').text();
@@ -26,7 +26,6 @@ async function extractContactInfo(url) {
 }
 
 async function scrapeSource(source) {
-    console.log(`Scraping ${source.name}...`);
     try {
         const { data } = await axios.get(source.url, {
             headers: {
@@ -61,25 +60,32 @@ async function scrapeSource(source) {
             }
         });
 
-        // Enrich with contact info
-        for (let i = 0; i < Math.min(results.length, 3); i++) {
-            const contacts = await extractContactInfo(results[i].link);
-            results[i].contact = contacts.telegram || contacts.email || null;
-        }
+        // Enrich with contact info in parallel
+        const enriched = await Promise.all(results.map(async (lead) => {
+            const contacts = await extractContactInfo(lead.link);
+            return { ...lead, contact: contacts.telegram || contacts.email || null };
+        }));
 
-        return results;
+        return enriched;
     } catch (error) {
-        console.error(`Error scraping ${source.name}:`, error.message);
+        console.error(`Scrape Error [${source.name}]:`, error.message);
         return [];
     }
 }
 
 async function runAllScrapers(sources) {
+    console.log(`Starting parallel scrape for ${sources.length} sources...`);
+    // Run all sources in parallel with allSettled to ensure one failure doesn't stop others
+    const tasks = sources.map(source => scrapeSource(source));
+    const results = await Promise.allSettled(tasks);
+    
     let allLeads = [];
-    for (const source of sources) {
-        const leads = await scrapeSource(source);
-        allLeads = [...allLeads, ...leads];
-    }
+    results.forEach(result => {
+        if (result.status === 'fulfilled') {
+            allLeads = [...allLeads, ...result.value];
+        }
+    });
+    
     return allLeads;
 }
 
