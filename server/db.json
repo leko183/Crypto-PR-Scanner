@@ -1,0 +1,96 @@
+{
+  "leads": [],
+  "lastScan": null,
+  "sources": [
+    {
+      "name": "beincrypto.com",
+      "url": "https://beincrypto.com/press-releases/",
+      "itemSelector": "article",
+      "titleSelector": "h3 a",
+      "linkSelector": "h3 a",
+      "dateSelector": "time",
+      "status": "READY"
+    },
+    {
+      "name": "ambcrypto.com",
+      "url": "https://ambcrypto.com/category/press-release/",
+      "itemSelector": ".post-item",
+      "titleSelector": ".post-title a",
+      "linkSelector": ".post-title a",
+      "dateSelector": ".post-date",
+      "status": "READY"
+    },
+    {
+      "name": "crypto.news",
+      "url": "https://crypto.news/news/press-releases/",
+      "itemSelector": ".post-loop-info",
+      "titleSelector": "h3 a",
+      "linkSelector": "h3 a",
+      "dateSelector": ".post-loop-date",
+      "status": "READY"
+    },
+    {
+      "name": "bitcoin.com",
+      "url": "https://news.bitcoin.com/category/press-release/",
+      "itemSelector": ".td-block-span6",
+      "titleSelector": ".entry-title a",
+      "linkSelector": ".entry-title a",
+      "dateSelector": "time",
+      "status": "READY"
+    },
+    {
+      "name": "u.today",
+      "url": "https://u.today/press-releases",
+      "itemSelector": ".news-item",
+      "titleSelector": ".news-item-title a",
+      "linkSelector": ".news-item-title a",
+      "dateSelector": ".news-item-date",
+      "status": "READY"
+    },
+    {
+      "name": "coingape.com",
+      "url": "https://coingape.com/press-releases/",
+      "itemSelector": ".post-list",
+      "titleSelector": "h3 a",
+      "linkSelector": "h3 a",
+      "dateSelector": "time",
+      "status": "READY"
+    },
+    {
+        "name": "cryptopolitan.com",
+        "url": "https://www.cryptopolitan.com/press-release/",
+        "itemSelector": "article",
+        "titleSelector": "h3 a",
+        "linkSelector": "h3 a",
+        "dateSelector": ".entry-date",
+        "status": "READY"
+    },
+    {
+        "name": "newsbtc.com",
+        "url": "https://www.newsbtc.com/press-releases/",
+        "itemSelector": ".post-item",
+        "titleSelector": "h3 a",
+        "linkSelector": "h3 a",
+        "dateSelector": "time",
+        "status": "READY"
+    },
+    {
+        "name": "bitcoinist.com",
+        "url": "https://bitcoinist.com/category/press-releases/",
+        "itemSelector": ".post-item",
+        "titleSelector": "h3 a",
+        "linkSelector": "h3 a",
+        "dateSelector": "time",
+        "status": "READY"
+    },
+    {
+        "name": "coinpedia.com",
+        "url": "https://coinpedia.org/press-release/",
+        "itemSelector": "article",
+        "titleSelector": "h2 a",
+        "linkSelector": "h2 a",
+        "dateSelector": ".post-date",
+        "status": "READY"
+    }
+  ]
+}
