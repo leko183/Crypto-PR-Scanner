@@ -1,7 +1,11 @@
 const { Pool } = require('pg');
 require('dotenv').config();
 
-// Railway cung cấp biến DATABASE_URL tự động
+if (!process.env.DATABASE_URL) {
+  console.error("CRITICAL ERROR: DATABASE_URL is not defined!");
+  console.error("Please go to Railway Dashboard -> Webapp -> Settings -> Variables and ensure DATABASE_URL is present.");
+}
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: {
@@ -10,8 +14,10 @@ const pool = new Pool({
 });
 
 const initDB = async () => {
-  const client = await pool.connect();
   try {
+    const client = await pool.connect();
+    console.log("Connected to PostgreSQL successfully");
+    
     await client.query(`
       CREATE TABLE IF NOT EXISTS sources (
         id SERIAL PRIMARY KEY,
@@ -37,7 +43,6 @@ const initDB = async () => {
       );
     `);
 
-    // Chèn dữ liệu mẫu nếu bảng sources trống
     const res = await client.query('SELECT COUNT(*) FROM sources');
     if (parseInt(res.rows[0].count) === 0) {
       await client.query(`
@@ -47,11 +52,10 @@ const initDB = async () => {
         ('ambcrypto.com', 'https://ambcrypto.com/category/press-release/', '.post-item', '.post-title a', '.post-title a', '.post-date')
       `);
     }
-    console.log("Database initialized successfully");
-  } catch (err) {
-    console.error("Error initializing database", err);
-  } finally {
+    console.log("Database tables initialized");
     client.release();
+  } catch (err) {
+    console.error("Database initialization failed:", err.message);
   }
 };
 

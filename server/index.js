@@ -6,16 +6,23 @@ const { runAllScrapers } = require('./scraper');
 const { pool, initDB } = require('./db');
 require('dotenv').config();
 
+// Global error handlers to prevent silent crashes
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+process.on('uncaughtException', (err) => {
+    console.error('Uncaught Exception:', err);
+});
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(cors());
 app.use(express.json());
 
-// Initialize Postgres
+// Initialize Database
 initDB();
 
-// Function to run the scanner (used by both API and Cron)
 const runAutomation = async () => {
   console.log('--- AUTO SCAN STARTING ---');
   try {
@@ -45,12 +52,12 @@ const runAutomation = async () => {
   }
 };
 
-// Schedule: Chạy mỗi 1 tiếng (vào phút thứ 00 của mỗi giờ)
+// Schedule: Every hour
 cron.schedule('0 * * * *', () => {
     runAutomation();
 });
 
-// API Endpoints
+// Endpoints
 app.get('/api/leads', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM leads ORDER BY id DESC');
@@ -124,9 +131,8 @@ app.patch('/api/leads/:project', async (req, res) => {
     }
 });
 
-// Serve static files from React app
+// Serve static
 app.use(express.static(path.join(__dirname, '../client/dist')));
-
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../client/dist/index.html'));
 });
