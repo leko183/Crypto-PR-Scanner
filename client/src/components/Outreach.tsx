@@ -42,7 +42,7 @@ Nguyen Minh`)
 
         <div className="tcard">
           <div style={{ padding: '20px', borderBottom: '0.5px solid var(--color-border-tertiary)', display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ width: '40px', height: '40px', background: activeTab === 'email' ? '#E6F1FB' : '#E1F5EE', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyCenter: 'center' }}>
+            <div style={{ width: '40px', height: '40px', background: activeTab === 'email' ? '#E6F1FB' : '#E1F5EE', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <i className={`ti ti-${activeTab === 'email' ? 'mail' : 'brand-telegram'}`} style={{ color: activeTab === 'email' ? '#185FA5' : '#0F6E56', fontSize: '20px' }}></i>
             </div>
             <div>
