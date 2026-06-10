@@ -26,22 +26,29 @@ async function extractContactInfo(url) {
 }
 
 async function scrapeSource(source) {
+    console.log(`[DEBUG] Starting scrape for: ${source.name} (${source.url})`);
     try {
         const { data } = await axios.get(source.url, {
             headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.5',
             },
-            timeout: 10000
+            timeout: 15000
         });
+        
         const $ = cheerio.load(data);
         const results = [];
+        const items = $(source.item_selector || source.itemSelector);
+        
+        console.log(`[DEBUG] Found ${items.length} items on ${source.name} using selector ${source.item_selector || source.itemSelector}`);
 
-        $(source.itemSelector).each((i, el) => {
+        items.each((i, el) => {
             if (i >= 5) return; 
             
-            const title = $(el).find(source.titleSelector).text().trim();
-            const link = $(el).find(source.linkSelector).attr('href');
-            const date = $(el).find(source.dateSelector).text().trim();
+            const title = $(el).find(source.title_selector || source.titleSelector).text().trim();
+            const link = $(el).find(source.link_selector || source.linkSelector).attr('href');
+            const date = $(el).find(source.date_selector || source.dateSelector).text().trim();
 
             if (title && link) {
                 const fullLink = link.startsWith('http') ? link : 
@@ -66,26 +73,29 @@ async function scrapeSource(source) {
             return { ...lead, contact: contacts.telegram || contacts.email || null };
         }));
 
+        console.log(`[DEBUG] Scrape success for ${source.name}: ${enriched.length} leads found`);
         return enriched;
     } catch (error) {
-        console.error(`Scrape Error [${source.name}]:`, error.message);
+        console.error(`[DEBUG] Scrape Error [${source.name}]: ${error.message}`);
         return [];
     }
 }
 
 async function runAllScrapers(sources) {
-    console.log(`Starting parallel scrape for ${sources.length} sources...`);
-    // Run all sources in parallel with allSettled to ensure one failure doesn't stop others
+    console.log(`[DEBUG] runAllScrapers called with ${sources.length} sources`);
     const tasks = sources.map(source => scrapeSource(source));
     const results = await Promise.allSettled(tasks);
     
     let allLeads = [];
-    results.forEach(result => {
+    results.forEach((result, idx) => {
         if (result.status === 'fulfilled') {
             allLeads = [...allLeads, ...result.value];
+        } else {
+            console.error(`[DEBUG] Task for ${sources[idx].name} rejected:`, result.reason);
         }
     });
     
+    console.log(`[DEBUG] Total leads found across all sources: ${allLeads.length}`);
     return allLeads;
 }
 

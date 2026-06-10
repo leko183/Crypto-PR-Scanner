@@ -48,7 +48,7 @@ const initDB = async () => {
         ['bitcoinist.com', 'https://bitcoinist.com/category/press-releases/', '.post-item', 'h3 a', 'h3 a', 'time'],
         ['coinpedia.org', 'https://coinpedia.org/press-release/', 'article', 'h2 a', 'h2 a', '.post-date'],
         ['coindoo.com', 'https://coindoo.com/category/press-releases/', 'article', 'h2 a', 'h2 a', 'time'],
-        ['coinmarketcap.com', 'https://coinmarketcap.com/alexandria/categories/press-release', '.sc-1qyf601-0', 'h2', 'a', 'time'],
+        ['coinmarketcap.com', 'https://coinmarketcap.com/alexandria/categories/press-release', 'article', 'h2', 'a', 'time'],
         ['analyticsinsight.net', 'https://www.analyticsinsight.net/category/press-release/', '.post-item', 'h2 a', 'h2 a', '.post-date'],
         ['captainaltcoin.com', 'https://captainaltcoin.com/category/press-releases/', 'article', 'h3 a', 'h3 a', 'time'],
         ['coingabbar.com', 'https://www.coingabbar.com/en/crypto-news/category/press-release', '.card', 'h5', 'a', '.date']
@@ -58,11 +58,16 @@ const initDB = async () => {
         await client.query(`
             INSERT INTO sources (name, url, item_selector, title_selector, link_selector, date_selector)
             VALUES ($1, $2, $3, $4, $5, $6)
-            ON CONFLICT (name) DO UPDATE SET url = EXCLUDED.url, item_selector = EXCLUDED.item_selector
+            ON CONFLICT (name) DO UPDATE SET 
+                url = EXCLUDED.url, 
+                item_selector = EXCLUDED.item_selector,
+                title_selector = EXCLUDED.title_selector,
+                link_selector = EXCLUDED.link_selector,
+                date_selector = EXCLUDED.date_selector
         `, s);
     }
 
-    console.log("All 15 Sources Initialized");
+    console.log("All 15 Sources Refreshed");
     client.release();
   } catch (err) {
     console.error("DB Init Error:", err.message);
