@@ -1,11 +1,13 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
 
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 async function extractContactInfo(url) {
     try {
         const { data } = await axios.get(url, { 
             timeout: 5000,
-            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' }
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36' }
         });
         const $ = cheerio.load(data);
         const text = $('body').text();
@@ -26,26 +28,24 @@ async function extractContactInfo(url) {
 }
 
 async function scrapeSource(source) {
-    console.log(`[DEBUG] Starting scrape for: ${source.name} (${source.url})`);
+    console.log(`[SCRAPER] Processing: ${source.name}`);
     try {
         const { data } = await axios.get(source.url, {
             headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.5',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
             },
-            timeout: 15000
+            timeout: 20000
         });
         
         const $ = cheerio.load(data);
         const results = [];
         const items = $(source.item_selector || source.itemSelector);
         
-        console.log(`[DEBUG] Found ${items.length} items on ${source.name} using selector ${source.item_selector || source.itemSelector}`);
+        console.log(`[SCRAPER] ${source.name}: Found ${items.length} items.`);
 
-        items.each((i, el) => {
-            if (i >= 5) return; 
-            
+        for (let i = 0; i < Math.min(items.length, 5); i++) {
+            const el = items[i];
             const title = $(el).find(source.title_selector || source.titleSelector).text().trim();
             const link = $(el).find(source.link_selector || source.linkSelector).attr('href');
             const date = $(el).find(source.date_selector || source.dateSelector).text().trim();
@@ -55,6 +55,9 @@ async function scrapeSource(source) {
                                  link.startsWith('//') ? `https:${link}` :
                                  `https://${source.name.replace('www.', '')}${link.startsWith('/') ? '' : '/'}${link}`;
                 
+                // Trích xuất contact cho từng link (chạy tuần tự để tránh bị block)
+                const contacts = await extractContactInfo(fullLink);
+                
                 results.push({
                     project: title.split(':')[0].trim(),
                     type: 'Press Release',
@@ -62,40 +65,32 @@ async function scrapeSource(source) {
                     date: date || new Date().toLocaleDateString(),
                     source: source.name,
                     link: fullLink,
+                    contact: contacts.telegram || contacts.email || null,
                     status: 'Pending'
                 });
+                await sleep(500); // Nghỉ ngắn giữa các bài viết
             }
-        });
+        }
 
-        // Enrich with contact info in parallel
-        const enriched = await Promise.all(results.map(async (lead) => {
-            const contacts = await extractContactInfo(lead.link);
-            return { ...lead, contact: contacts.telegram || contacts.email || null };
-        }));
-
-        console.log(`[DEBUG] Scrape success for ${source.name}: ${enriched.length} leads found`);
-        return enriched;
+        return results;
     } catch (error) {
-        console.error(`[DEBUG] Scrape Error [${source.name}]: ${error.message}`);
+        console.error(`[SCRAPER] Error on ${source.name}: ${error.message}`);
         return [];
     }
 }
 
 async function runAllScrapers(sources) {
-    console.log(`[DEBUG] runAllScrapers called with ${sources.length} sources`);
-    const tasks = sources.map(source => scrapeSource(source));
-    const results = await Promise.allSettled(tasks);
-    
+    console.log(`[SCRAPER] Starting scan for ${sources.length} sources...`);
     let allLeads = [];
-    results.forEach((result, idx) => {
-        if (result.status === 'fulfilled') {
-            allLeads = [...allLeads, ...result.value];
-        } else {
-            console.error(`[DEBUG] Task for ${sources[idx].name} rejected:`, result.reason);
-        }
-    });
     
-    console.log(`[DEBUG] Total leads found across all sources: ${allLeads.length}`);
+    // Chạy tuần tự từng site để đảm bảo tính ổn định trên Railway
+    for (const source of sources) {
+        const leads = await scrapeSource(source);
+        allLeads = [...allLeads, ...leads];
+        await sleep(1000); // Nghỉ 1 giây giữa các website
+    }
+    
+    console.log(`[SCRAPER] Completed. Total leads: ${allLeads.length}`);
     return allLeads;
 }
 
