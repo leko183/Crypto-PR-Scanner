@@ -7,27 +7,47 @@ const pool = new Pool({
 });
 
 const initDB = async () => {
-  let client;
+  const client = await pool.connect();
   try {
-    client = await pool.connect();
-    console.log(">>> [DB] Initializing...");
-
-    // 1. Tạo các bảng cơ bản
+    console.log(">>> [DATABASE] Starting clean initialization...");
+    
+    // 1. Khởi tạo bảng sources với đầy đủ các cột ngay từ đầu
     await client.query(`
       CREATE TABLE IF NOT EXISTS sources (
         id SERIAL PRIMARY KEY,
-        name TEXT UNIQUE,
-        url TEXT,
-        item_selector TEXT,
-        title_selector TEXT,
-        link_selector TEXT,
-        date_selector TEXT,
-        status TEXT DEFAULT 'READY'
+        name TEXT UNIQUE NOT NULL,
+        url TEXT NOT NULL,
+        item_selector TEXT NOT NULL,
+        title_selector TEXT NOT NULL,
+        link_selector TEXT NOT NULL,
+        date_selector TEXT NOT NULL,
+        status TEXT DEFAULT 'READY',
+        last_error TEXT,
+        last_scanned TIMESTAMP
       );
+    `);
 
+    // Đảm bảo các cột tồn tại (đề phòng bảng cũ đã có nhưng thiếu cột)
+    const columnsToAdd = [
+        ['last_error', 'TEXT'],
+        ['last_scanned', 'TIMESTAMP']
+    ];
+    for (const [col, type] of columnsToAdd) {
+        await client.query(`
+            DO $$ 
+            BEGIN 
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='sources' AND column_name='${col}') THEN
+                    ALTER TABLE sources ADD COLUMN ${col} ${type};
+                END IF;
+            END $$;
+        `);
+    }
+
+    // 2. Khởi tạo bảng leads
+    await client.query(`
       CREATE TABLE IF NOT EXISTS leads (
         id SERIAL PRIMARY KEY,
-        project TEXT UNIQUE,
+        project TEXT UNIQUE NOT NULL,
         type TEXT,
         category TEXT,
         date TEXT,
@@ -38,11 +58,7 @@ const initDB = async () => {
       );
     `);
 
-    // 2. Cập nhật thêm cột mới nếu chưa có (Dành cho DB cũ trên Railway)
-    try { await client.query('ALTER TABLE sources ADD COLUMN IF NOT EXISTS last_error TEXT'); } catch(e) {}
-    try { await client.query('ALTER TABLE sources ADD COLUMN IF NOT EXISTS last_scanned TIMESTAMP'); } catch(e) {}
-
-    // 3. Nạp 15 Sources chuẩn
+    // 3. Danh sách 15 Sources chuẩn nhất
     const sources = [
         ['beincrypto.com', 'https://beincrypto.com/press-releases/', 'article', 'h3 a', 'h3 a', 'time'],
         ['ambcrypto.com', 'https://ambcrypto.com/category/press-release/', '.post-item', '.post-title a', '.post-title a', '.post-date'],
@@ -61,6 +77,7 @@ const initDB = async () => {
         ['coingabbar.com', 'https://www.coingabbar.com/en/crypto-news/category/press-release', '.card', 'h5', 'a', '.date']
     ];
 
+    // Nạp cưỡng bức để đảm bảo 15 nguồn luôn hiện diện
     for (const s of sources) {
         await client.query(`
             INSERT INTO sources (name, url, item_selector, title_selector, link_selector, date_selector)
@@ -70,22 +87,24 @@ const initDB = async () => {
                 item_selector = EXCLUDED.item_selector,
                 title_selector = EXCLUDED.title_selector,
                 link_selector = EXCLUDED.link_selector,
-                date_selector = EXCLUDED.date_selector
+                date_selector = EXCLUDED.date_selector,
+                status = 'READY'
         `, s);
     }
-    
-    // Heartbeat để kiểm tra hệ thống
+
+    // 4. Heartbeat: Dấu hiệu hệ thống đã sẵn sàng
     await client.query(`
         INSERT INTO leads (project, type, category, date, contact, source, link, status) 
-        VALUES ('SYSTEM VERIFIED', 'Status', 'System', 'Online', '@Admin', 'Railway', '#', 'Active')
-        ON CONFLICT (project) DO UPDATE SET date = 'Last Check: ' || NOW()
+        VALUES ('SYSTEM ONLINE', 'Core', 'Infrastructure', 'Verified', 'Automated', 'Railway', '#', 'Active')
+        ON CONFLICT (project) DO UPDATE SET date = 'Last Sync: ' || NOW()
     `);
 
-    console.log(">>> [DB] Setup Complete");
+    console.log(">>> [DATABASE] All 15 sources are synced and ready.");
   } catch (err) {
-    console.error(">>> [DB] Setup Error:", err.message);
+    console.error(">>> [DATABASE] Fatal Init Error:", err.message);
+    throw err;
   } finally {
-    if (client) client.release();
+    client.release();
   }
 };
 
