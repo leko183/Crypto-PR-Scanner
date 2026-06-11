@@ -3,13 +3,15 @@ require('dotenv').config();
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
+  ssl: { rejectUnauthorized: false },
+  connectionTimeoutMillis: 5000, // Timeout sau 5s nếu ko kết nối đc
 });
 
 const initDB = async () => {
+  let client;
   try {
-    const client = await pool.connect();
-    console.log("Database Connected");
+    client = await pool.connect();
+    console.log(">>> [DB] Database Connected Successfully");
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS sources (
@@ -66,11 +68,19 @@ const initDB = async () => {
                 date_selector = EXCLUDED.date_selector
         `, s);
     }
+    console.log(">>> [DB] 15 Sources Synced");
+    
+    // Add heartbeat
+    await client.query(`
+        INSERT INTO leads (project, type, category, date, contact, source, link, status) 
+        VALUES ('SYSTEM ACTIVE', 'Status', 'System', 'Online', '@Admin', 'Railway', '#', 'Active')
+        ON CONFLICT (project) DO UPDATE SET date = 'Online ' || NOW()
+    `);
 
-    console.log("All 15 Sources Refreshed");
-    client.release();
   } catch (err) {
-    console.error("DB Init Error:", err.message);
+    console.error(">>> [DB] Connection Error:", err.message);
+  } finally {
+    if (client) client.release();
   }
 };
 
