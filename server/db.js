@@ -9,9 +9,8 @@ const pool = new Pool({
 const initDB = async () => {
   const client = await pool.connect();
   try {
-    console.log(">>> [DATABASE] Starting clean initialization...");
-    
-    // 1. Khởi tạo bảng sources với đầy đủ các cột ngay từ đầu
+    console.log(">>> [DB] Initializing Stealth Sources...");
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS sources (
         id SERIAL PRIMARY KEY,
@@ -25,26 +24,6 @@ const initDB = async () => {
         last_error TEXT,
         last_scanned TIMESTAMP
       );
-    `);
-
-    // Đảm bảo các cột tồn tại (đề phòng bảng cũ đã có nhưng thiếu cột)
-    const columnsToAdd = [
-        ['last_error', 'TEXT'],
-        ['last_scanned', 'TIMESTAMP']
-    ];
-    for (const [col, type] of columnsToAdd) {
-        await client.query(`
-            DO $$ 
-            BEGIN 
-                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='sources' AND column_name='${col}') THEN
-                    ALTER TABLE sources ADD COLUMN ${col} ${type};
-                END IF;
-            END $$;
-        `);
-    }
-
-    // 2. Khởi tạo bảng leads
-    await client.query(`
       CREATE TABLE IF NOT EXISTS leads (
         id SERIAL PRIMARY KEY,
         project TEXT UNIQUE NOT NULL,
@@ -58,50 +37,45 @@ const initDB = async () => {
       );
     `);
 
-    // 3. Danh sách 15 Sources chuẩn nhất
-    const sources = [
-        ['beincrypto.com', 'https://beincrypto.com/press-releases/', 'article', 'h3 a', 'h3 a', 'time'],
-        ['ambcrypto.com', 'https://ambcrypto.com/category/press-release/', '.post-item', '.post-title a', '.post-title a', '.post-date'],
-        ['crypto.news', 'https://crypto.news/news/press-releases/', '.post-loop-info', 'h3 a', 'h3 a', '.post-loop-date'],
-        ['bitcoin.com', 'https://news.bitcoin.com/category/press-release/', '.td-block-span6', '.entry-title a', '.entry-title a', 'time'],
-        ['u.today', 'https://u.today/press-releases', '.news-item', '.news-item-title a', '.news-item-title a', '.news-item-date'],
-        ['coingape.com', 'https://coingape.com/press-releases/', '.post-list', 'h3 a', 'h3 a', 'time'],
-        ['cryptopolitan.com', 'https://www.cryptopolitan.com/press-release/', 'article', 'h3 a', 'h3 a', '.entry-date'],
-        ['newsbtc.com', 'https://www.newsbtc.com/press-releases/', '.post-item', 'h3 a', 'h3 a', 'time'],
-        ['bitcoinist.com', 'https://bitcoinist.com/category/press-releases/', '.post-item', 'h3 a', 'h3 a', 'time'],
-        ['coinpedia.org', 'https://coinpedia.org/press-release/', 'article', 'h2 a', 'h2 a', '.post-date'],
-        ['coindoo.com', 'https://coindoo.com/category/press-releases/', 'article', 'h2 a', 'h2 a', 'time'],
+    // Danh sách 15 Sources với URL đã cập nhật chuẩn 2026
+    const sourcesData = [
+        ['beincrypto.com', 'https://beincrypto.com/press-releases/', 'article', 'h3', 'a', 'time'],
+        ['ambcrypto.com', 'https://ambcrypto.com/category/press-release/', '.post-item', 'h2', 'a', '.post-date'],
+        ['crypto.news', 'https://crypto.news/news/press-releases/', 'article', 'h3', 'a', 'time'],
+        ['bitcoin.com', 'https://news.bitcoin.com/press-releases/', '.td-block-span6', 'h3', 'a', 'time'],
+        ['u.today', 'https://u.today/press-releases', '.news-item', '.news-item-title', 'a', 'time'],
+        ['coingape.com', 'https://coingape.com/press-releases/', 'article', 'h3', 'a', 'time'],
+        ['cryptopolitan.com', 'https://www.cryptopolitan.com/press-release/', 'article', 'h3', 'a', 'time'],
+        ['newsbtc.com', 'https://www.newsbtc.com/press-releases/', 'article', 'h3', 'a', 'time'],
+        ['bitcoinist.com', 'https://bitcoinist.com/category/press-releases/', 'article', 'h3', 'a', 'time'],
+        ['coinpedia.org', 'https://coinpedia.org/press-release/', 'article', 'h2', 'a', 'time'],
+        ['coindoo.com', 'https://coindoo.com/category/press-releases/', 'article', 'h2', 'a', 'time'],
         ['coinmarketcap.com', 'https://coinmarketcap.com/alexandria/categories/press-release', 'article', 'h2', 'a', 'time'],
-        ['analyticsinsight.net', 'https://www.analyticsinsight.net/category/press-release/', '.post-item', 'h2 a', 'h2 a', '.post-date'],
-        ['captainaltcoin.com', 'https://captainaltcoin.com/category/press-releases/', 'article', 'h3 a', 'h3 a', 'time'],
-        ['coingabbar.com', 'https://www.coingabbar.com/en/crypto-news/category/press-release', '.card', 'h5', 'a', '.date']
+        ['analyticsinsight.net', 'https://www.analyticsinsight.net/category/press-release/', 'article', 'h2', 'a', 'time'],
+        ['captainaltcoin.com', 'https://captainaltcoin.com/category/press-releases/', 'article', 'h3', 'a', 'time'],
+        ['coingabbar.com', 'https://www.coingabbar.com/en/crypto-news/category/press-release', '.card', 'h5', 'a', 'time']
     ];
 
-    // Nạp cưỡng bức để đảm bảo 15 nguồn luôn hiện diện
-    for (const s of sources) {
+    for (const s of sourcesData) {
         await client.query(`
             INSERT INTO sources (name, url, item_selector, title_selector, link_selector, date_selector)
             VALUES ($1, $2, $3, $4, $5, $6)
             ON CONFLICT (name) DO UPDATE SET 
                 url = EXCLUDED.url, 
                 item_selector = EXCLUDED.item_selector,
-                title_selector = EXCLUDED.title_selector,
-                link_selector = EXCLUDED.link_selector,
-                date_selector = EXCLUDED.date_selector,
                 status = 'READY'
         `, s);
     }
-
-    // 4. Heartbeat: Dấu hiệu hệ thống đã sẵn sàng
+    
     await client.query(`
         INSERT INTO leads (project, type, category, date, contact, source, link, status) 
-        VALUES ('SYSTEM ONLINE', 'Core', 'Infrastructure', 'Verified', 'Automated', 'Railway', '#', 'Active')
-        ON CONFLICT (project) DO UPDATE SET date = 'Last Sync: ' || NOW()
+        VALUES ('STEALTH SYSTEM ACTIVE', 'Core', 'Security', 'Online', '@Admin', 'Railway', '#', 'Active')
+        ON CONFLICT (project) DO UPDATE SET date = NOW()::text
     `);
 
-    console.log(">>> [DATABASE] All 15 sources are synced and ready.");
+    console.log(">>> [DB] Stealth Initialization Complete.");
   } catch (err) {
-    console.error(">>> [DATABASE] Fatal Init Error:", err.message);
+    console.error(">>> [DB] Init Error:", err);
     throw err;
   } finally {
     client.release();
