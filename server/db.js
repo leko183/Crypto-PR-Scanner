@@ -4,15 +4,15 @@ require('dotenv').config();
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
-  connectionTimeoutMillis: 5000,
 });
 
 const initDB = async () => {
   let client;
   try {
     client = await pool.connect();
-    console.log(">>> [DB] Database Connected Successfully");
+    console.log(">>> [DB] Initializing...");
 
+    // 1. Tạo các bảng cơ bản
     await client.query(`
       CREATE TABLE IF NOT EXISTS sources (
         id SERIAL PRIMARY KEY,
@@ -22,9 +22,7 @@ const initDB = async () => {
         title_selector TEXT,
         link_selector TEXT,
         date_selector TEXT,
-        status TEXT DEFAULT 'READY',
-        last_error TEXT,
-        last_scanned TIMESTAMP
+        status TEXT DEFAULT 'READY'
       );
 
       CREATE TABLE IF NOT EXISTS leads (
@@ -40,6 +38,11 @@ const initDB = async () => {
       );
     `);
 
+    // 2. Cập nhật thêm cột mới nếu chưa có (Dành cho DB cũ trên Railway)
+    try { await client.query('ALTER TABLE sources ADD COLUMN IF NOT EXISTS last_error TEXT'); } catch(e) {}
+    try { await client.query('ALTER TABLE sources ADD COLUMN IF NOT EXISTS last_scanned TIMESTAMP'); } catch(e) {}
+
+    // 3. Nạp 15 Sources chuẩn
     const sources = [
         ['beincrypto.com', 'https://beincrypto.com/press-releases/', 'article', 'h3 a', 'h3 a', 'time'],
         ['ambcrypto.com', 'https://ambcrypto.com/category/press-release/', '.post-item', '.post-title a', '.post-title a', '.post-date'],
@@ -71,15 +74,16 @@ const initDB = async () => {
         `, s);
     }
     
-    // Heartbeat
+    // Heartbeat để kiểm tra hệ thống
     await client.query(`
         INSERT INTO leads (project, type, category, date, contact, source, link, status) 
-        VALUES ('SYSTEM ACTIVE', 'Status', 'System', 'Online', '@Admin', 'Railway', '#', 'Active')
-        ON CONFLICT (project) DO UPDATE SET date = 'Online ' || NOW()
+        VALUES ('SYSTEM VERIFIED', 'Status', 'System', 'Online', '@Admin', 'Railway', '#', 'Active')
+        ON CONFLICT (project) DO UPDATE SET date = 'Last Check: ' || NOW()
     `);
 
+    console.log(">>> [DB] Setup Complete");
   } catch (err) {
-    console.error(">>> [DB] Connection Error:", err.message);
+    console.error(">>> [DB] Setup Error:", err.message);
   } finally {
     if (client) client.release();
   }

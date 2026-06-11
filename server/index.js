@@ -6,7 +6,7 @@ const { runAllScrapers } = require('./scraper');
 const { pool, initDB } = require('./db');
 require('dotenv').config();
 
-console.log('>>> [SERVER] BOOTING...');
+console.log('>>> [SERVER] BOOTING AT ' + new Date().toISOString());
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -14,16 +14,25 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
+// Log requests
+app.use((req, res, next) => {
+    console.log(`[API] ${req.method} ${req.url}`);
+    next();
+});
+
 // Initialize Database
 initDB();
 
 const runAutomation = async () => {
-  console.log('--- AUTO SCAN STARTING ---');
+  console.log('>>> [AUTO] STARTING FULL SCAN...');
   try {
     const sourcesRes = await pool.query('SELECT * FROM sources');
     const sources = sourcesRes.rows;
+    console.log(`[AUTO] Scanning ${sources.length} websites.`);
+
     const newLeads = await runAllScrapers(sources, pool);
     
+    console.log(`[AUTO] Found ${newLeads.length} total leads. Saving...`);
     for (const lead of newLeads) {
         await pool.query(
             `INSERT INTO leads (project, type, category, date, contact, source, link, status) 
@@ -32,38 +41,20 @@ const runAutomation = async () => {
             [lead.project, lead.type, lead.category, lead.date, lead.contact, lead.source, lead.link, lead.status]
         );
     }
-    console.log(`--- AUTO SCAN FINISHED ---`);
+    console.log(`>>> [AUTO] SCAN COMPLETED.`);
   } catch (err) {
-    console.error('>>> [AUTO] Error:', err.message);
+    console.error('[AUTO] Error:', err.message);
   }
 };
 
 cron.schedule('0 * * * *', () => runAutomation());
 
 // ENDPOINTS
-app.get('/api/stats', async (req, res) => {
-  try {
-    const leadsRes = await pool.query('SELECT * FROM leads');
-    const leads = leadsRes.rows;
-    const contacts = leads.filter(l => l.contact).length;
-    res.json({
-      prArticles: leads.length * 3, 
-      projectsDetected: leads.length,
-      contactsCollected: contacts,
-      outreachSent: leads.filter(l => l.status === 'Sent').length,
-      todayPR: `+${leads.length}`,
-      weekProjects: '+12',
-      contactRate: leads.length > 0 ? `${Math.round((contacts / leads.length) * 100)}%` : '0%',
-      replyRate: '15%'
-    });
-  } catch (err) {
-    res.json({ prArticles: 0, projectsDetected: 0, contactsCollected: 0, outreachSent: 0, todayPR: '0', weekProjects: '0', contactRate: '0%', replyRate: '0%' });
-  }
-});
+app.get('/api/health', (req, res) => res.json({ status: 'active', db: !!pool }));
 
 app.get('/api/leads', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM leads ORDER BY id DESC LIMIT 100');
+    const result = await pool.query('SELECT * FROM leads ORDER BY id DESC LIMIT 150');
     res.json(result.rows);
   } catch (err) { res.json([]); }
 });
@@ -77,7 +68,7 @@ app.get('/api/sources', async (req, res) => {
 
 app.post('/api/scan', async (req, res) => {
   runAutomation(); 
-  res.json({ message: 'Scan started' });
+  res.json({ message: 'Scan triggered' });
 });
 
 app.patch('/api/leads/:project', async (req, res) => {
@@ -85,11 +76,11 @@ app.patch('/api/leads/:project', async (req, res) => {
     const { status } = req.body;
     try {
         await pool.query('UPDATE leads SET status = $1 WHERE project = $2', [status, project]);
-        res.json({ message: 'OK' });
+        res.json({ success: true });
     } catch (err) { res.status(500).end(); }
 });
 
 app.use(express.static(path.join(__dirname, '../client/dist')));
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, '../client/dist/index.html')));
 
-app.listen(PORT, () => console.log(`>>> [SERVER] RUNNING ON PORT ${PORT}`));
+app.listen(PORT, () => console.log(`>>> [SERVER] LISTENING ON PORT ${PORT}`));
