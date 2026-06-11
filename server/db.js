@@ -4,7 +4,7 @@ require('dotenv').config();
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
-  connectionTimeoutMillis: 5000, // Timeout sau 5s nếu ko kết nối đc
+  connectionTimeoutMillis: 5000,
 });
 
 const initDB = async () => {
@@ -22,7 +22,9 @@ const initDB = async () => {
         title_selector TEXT,
         link_selector TEXT,
         date_selector TEXT,
-        status TEXT DEFAULT 'READY'
+        status TEXT DEFAULT 'READY',
+        last_error TEXT,
+        last_scanned TIMESTAMP
       );
 
       CREATE TABLE IF NOT EXISTS leads (
@@ -68,9 +70,8 @@ const initDB = async () => {
                 date_selector = EXCLUDED.date_selector
         `, s);
     }
-    console.log(">>> [DB] 15 Sources Synced");
     
-    // Add heartbeat
+    // Heartbeat
     await client.query(`
         INSERT INTO leads (project, type, category, date, contact, source, link, status) 
         VALUES ('SYSTEM ACTIVE', 'Status', 'System', 'Online', '@Admin', 'Railway', '#', 'Active')

@@ -14,15 +14,15 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
-// Initialize Database non-blocking
+// Initialize Database
 initDB();
 
 const runAutomation = async () => {
-  console.log('>>> [AUTO] SCAN CYCLE STARTED');
+  console.log('--- AUTO SCAN STARTING ---');
   try {
     const sourcesRes = await pool.query('SELECT * FROM sources');
     const sources = sourcesRes.rows;
-    const newLeads = await runAllScrapers(sources);
+    const newLeads = await runAllScrapers(sources, pool);
     
     for (const lead of newLeads) {
         await pool.query(
@@ -32,7 +32,7 @@ const runAutomation = async () => {
             [lead.project, lead.type, lead.category, lead.date, lead.contact, lead.source, lead.link, lead.status]
         );
     }
-    console.log(`>>> [AUTO] SCAN CYCLE FINISHED. SAVED ${newLeads.length} LEADS.`);
+    console.log(`--- AUTO SCAN FINISHED ---`);
   } catch (err) {
     console.error('>>> [AUTO] Error:', err.message);
   }
@@ -40,7 +40,7 @@ const runAutomation = async () => {
 
 cron.schedule('0 * * * *', () => runAutomation());
 
-// ENDPOINTS with Fallbacks
+// ENDPOINTS
 app.get('/api/stats', async (req, res) => {
   try {
     const leadsRes = await pool.query('SELECT * FROM leads');
@@ -57,7 +57,6 @@ app.get('/api/stats', async (req, res) => {
       replyRate: '15%'
     });
   } catch (err) {
-    // Fallback data if DB fails
     res.json({ prArticles: 0, projectsDetected: 0, contactsCollected: 0, outreachSent: 0, todayPR: '0', weekProjects: '0', contactRate: '0%', replyRate: '0%' });
   }
 });
@@ -66,18 +65,14 @@ app.get('/api/leads', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM leads ORDER BY id DESC LIMIT 100');
     res.json(result.rows);
-  } catch (err) {
-    res.json([]); // Return empty list instead of 500
-  }
+  } catch (err) { res.json([]); }
 });
 
 app.get('/api/sources', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM sources ORDER BY id ASC');
     res.json(result.rows);
-  } catch (err) {
-    res.json([{ name: 'Database Error', status: 'ERROR' }]);
-  }
+  } catch (err) { res.json([]); }
 });
 
 app.post('/api/scan', async (req, res) => {

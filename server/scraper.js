@@ -6,43 +6,47 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 async function extractContactInfo(url) {
     try {
         const { data } = await axios.get(url, { 
-            timeout: 5000,
-            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36' }
+            timeout: 7000,
+            headers: { 
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+            }
         });
         const $ = cheerio.load(data);
         const text = $('body').text();
-        
         const telegramRegex = /(@[a-zA-Z0-9_]{5,32})|t\.me\/([a-zA-Z0-9_]{5,32})/g;
         const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
-        
         const telegrams = [...text.matchAll(telegramRegex)].map(m => m[0]);
         const emails = [...text.matchAll(emailRegex)].map(m => m[0]);
-        
-        return {
-            telegram: telegrams.length > 0 ? telegrams[0] : null,
-            email: emails.length > 0 ? emails[0] : null
-        };
-    } catch (error) {
-        return { telegram: null, email: null };
-    }
+        return { telegram: telegrams[0] || null, email: emails[0] || null };
+    } catch (error) { return { telegram: null, email: null }; }
 }
 
-async function scrapeSource(source) {
-    console.log(`[SCRAPER] Processing: ${source.name}`);
+async function scrapeSource(source, pool) {
+    console.log(`[SCRAPER] Start: ${source.name}`);
     try {
+        // Cập nhật trạng thái đang quét vào DB
+        await pool.query('UPDATE sources SET status = $1, last_scanned = NOW(), last_error = NULL WHERE id = $2', ['SCANNING', source.id]);
+
         const { data } = await axios.get(source.url, {
             headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36',
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Cache-Control': 'no-cache',
+                'Pragma': 'no-cache'
             },
-            timeout: 20000
+            timeout: 25000
         });
         
         const $ = cheerio.load(data);
         const results = [];
         const items = $(source.item_selector || source.itemSelector);
         
-        console.log(`[SCRAPER] ${source.name}: Found ${items.length} items.`);
+        if (items.length === 0) {
+            await pool.query('UPDATE sources SET last_error = $1, status = $2 WHERE id = $3', [`No items found with selector: ${source.item_selector}`, 'DONE', source.id]);
+            return [];
+        }
 
         for (let i = 0; i < Math.min(items.length, 5); i++) {
             const el = items[i];
@@ -55,11 +59,9 @@ async function scrapeSource(source) {
                                  link.startsWith('//') ? `https:${link}` :
                                  `https://${source.name.replace('www.', '')}${link.startsWith('/') ? '' : '/'}${link}`;
                 
-                // Trích xuất contact cho từng link (chạy tuần tự để tránh bị block)
                 const contacts = await extractContactInfo(fullLink);
-                
                 results.push({
-                    project: title.split(':')[0].trim(),
+                    project: title.split(':')[0].trim().substring(0, 100),
                     type: 'Press Release',
                     category: 'Crypto',
                     date: date || new Date().toLocaleDateString(),
@@ -68,29 +70,26 @@ async function scrapeSource(source) {
                     contact: contacts.telegram || contacts.email || null,
                     status: 'Pending'
                 });
-                await sleep(500); // Nghỉ ngắn giữa các bài viết
+                await sleep(1000); 
             }
         }
 
+        await pool.query('UPDATE sources SET status = $1, last_error = $2 WHERE id = $3', ['DONE', `Success: ${results.length} leads`, source.id]);
         return results;
     } catch (error) {
-        console.error(`[SCRAPER] Error on ${source.name}: ${error.message}`);
+        console.error(`[SCRAPER] Error ${source.name}: ${error.message}`);
+        await pool.query('UPDATE sources SET status = $1, last_error = $2 WHERE id = $3', ['ERROR', error.message, source.id]);
         return [];
     }
 }
 
-async function runAllScrapers(sources) {
-    console.log(`[SCRAPER] Starting scan for ${sources.length} sources...`);
+async function runAllScrapers(sources, pool) {
     let allLeads = [];
-    
-    // Chạy tuần tự từng site để đảm bảo tính ổn định trên Railway
     for (const source of sources) {
-        const leads = await scrapeSource(source);
+        const leads = await scrapeSource(source, pool);
         allLeads = [...allLeads, ...leads];
-        await sleep(1000); // Nghỉ 1 giây giữa các website
+        await sleep(2000); // Nghỉ 2 giây giữa các site
     }
-    
-    console.log(`[SCRAPER] Completed. Total leads: ${allLeads.length}`);
     return allLeads;
 }
 
