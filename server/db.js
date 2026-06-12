@@ -9,7 +9,7 @@ const pool = new Pool({
 const initDB = async () => {
   const client = await pool.connect();
   try {
-    console.log(">>> [DB] Initializing Stealth Sources...");
+    console.log(">>> [DATABASE] Starting Initialization...");
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS sources (
@@ -37,46 +37,45 @@ const initDB = async () => {
       );
     `);
 
-    // Danh sách 15 Sources với URL đã cập nhật chuẩn 2026
-    const sourcesData = [
-        ['beincrypto.com', 'https://beincrypto.com/press-releases/', 'article', 'h3', 'a', 'time'],
-        ['ambcrypto.com', 'https://ambcrypto.com/category/press-release/', '.post-item', 'h2', 'a', '.post-date'],
-        ['crypto.news', 'https://crypto.news/news/press-releases/', 'article', 'h3', 'a', 'time'],
-        ['bitcoin.com', 'https://news.bitcoin.com/press-releases/', '.td-block-span6', 'h3', 'a', 'time'],
-        ['u.today', 'https://u.today/press-releases', '.news-item', '.news-item-title', 'a', 'time'],
-        ['coingape.com', 'https://coingape.com/press-releases/', 'article', 'h3', 'a', 'time'],
-        ['cryptopolitan.com', 'https://www.cryptopolitan.com/press-release/', 'article', 'h3', 'a', 'time'],
-        ['newsbtc.com', 'https://www.newsbtc.com/press-releases/', 'article', 'h3', 'a', 'time'],
-        ['bitcoinist.com', 'https://bitcoinist.com/category/press-releases/', 'article', 'h3', 'a', 'time'],
-        ['coinpedia.org', 'https://coinpedia.org/press-release/', 'article', 'h2', 'a', 'time'],
-        ['coindoo.com', 'https://coindoo.com/category/press-releases/', 'article', 'h2', 'a', 'time'],
+    // DỌN DẸP DỮ LIỆU RÁC CŨ
+    console.log(">>> [DATABASE] Cleaning up old system noise...");
+    await client.query(`DELETE FROM leads WHERE project LIKE 'SYSTEM %' OR project LIKE 'STEALTH %'`);
+
+    const sources = [
+        ['beincrypto.com', 'https://beincrypto.com/press-releases/', 'article', 'h3 a', 'h3 a', 'time'],
+        ['ambcrypto.com', 'https://ambcrypto.com/category/press-release/', '.post-item', '.post-title a', '.post-title a', '.post-date'],
+        ['crypto.news', 'https://crypto.news/news/press-releases/', '.post-loop-info', 'h3 a', 'h3 a', '.post-loop-date'],
+        ['bitcoin.com', 'https://news.bitcoin.com/category/press-release/', '.td-block-span6', '.entry-title a', '.entry-title a', 'time'],
+        ['u.today', 'https://u.today/press-releases', '.news-item', '.news-item-title a', '.news-item-title a', '.news-item-date'],
+        ['coingape.com', 'https://coingape.com/press-releases/', '.post-list', 'h3 a', 'h3 a', 'time'],
+        ['cryptopolitan.com', 'https://www.cryptopolitan.com/press-release/', 'article', 'h3 a', 'h3 a', '.entry-date'],
+        ['newsbtc.com', 'https://www.newsbtc.com/press-releases/', '.post-item', 'h3 a', 'h3 a', 'time'],
+        ['bitcoinist.com', 'https://bitcoinist.com/category/press-releases/', '.post-item', 'h3 a', 'h3 a', 'time'],
+        ['coinpedia.org', 'https://coinpedia.org/press-release/', 'article', 'h2 a', 'h2 a', '.post-date'],
+        ['coindoo.com', 'https://coindoo.com/category/press-releases/', 'article', 'h2 a', 'h2 a', 'time'],
         ['coinmarketcap.com', 'https://coinmarketcap.com/alexandria/categories/press-release', 'article', 'h2', 'a', 'time'],
-        ['analyticsinsight.net', 'https://www.analyticsinsight.net/category/press-release/', 'article', 'h2', 'a', 'time'],
-        ['captainaltcoin.com', 'https://captainaltcoin.com/category/press-releases/', 'article', 'h3', 'a', 'time'],
-        ['coingabbar.com', 'https://www.coingabbar.com/en/crypto-news/category/press-release', '.card', 'h5', 'a', 'time']
+        ['analyticsinsight.net', 'https://www.analyticsinsight.net/category/press-release/', '.post-item', 'h2 a', 'h2 a', '.post-date'],
+        ['captainaltcoin.com', 'https://captainaltcoin.com/category/press-releases/', 'article', 'h3 a', 'h3 a', 'time'],
+        ['coingabbar.com', 'https://www.coingabbar.com/en/crypto-news/category/press-release', '.card', 'h5', 'a', '.date']
     ];
 
-    for (const s of sourcesData) {
+    for (const s of sources) {
         await client.query(`
             INSERT INTO sources (name, url, item_selector, title_selector, link_selector, date_selector)
             VALUES ($1, $2, $3, $4, $5, $6)
             ON CONFLICT (name) DO UPDATE SET 
                 url = EXCLUDED.url, 
                 item_selector = EXCLUDED.item_selector,
+                title_selector = EXCLUDED.title_selector,
+                link_selector = EXCLUDED.link_selector,
+                date_selector = EXCLUDED.date_selector,
                 status = 'READY'
         `, s);
     }
-    
-    await client.query(`
-        INSERT INTO leads (project, type, category, date, contact, source, link, status) 
-        VALUES ('STEALTH SYSTEM ACTIVE', 'Core', 'Security', 'Online', '@Admin', 'Railway', '#', 'Active')
-        ON CONFLICT (project) DO UPDATE SET date = NOW()::text
-    `);
 
-    console.log(">>> [DB] Stealth Initialization Complete.");
+    console.log(">>> [DATABASE] Init Done. Clean State.");
   } catch (err) {
-    console.error(">>> [DB] Init Error:", err);
-    throw err;
+    console.error(">>> [DATABASE] Init Error:", err.message);
   } finally {
     client.release();
   }

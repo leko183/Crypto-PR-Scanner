@@ -100,7 +100,7 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, leads, sources, onScan, lo
                 </tr>
               </thead>
               <tbody>
-                {leads.map((lead) => (
+                {leads.filter(l => l.project && !l.project.includes('SYSTEM')).slice(0, 100).map((lead) => (
                   <tr key={lead.id}>
                     <td>
                       <div className="proj-name">{lead.project}</div>
