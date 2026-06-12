@@ -83,13 +83,30 @@ async function scrapeSource(source, pool) {
             const el = items[i];
             
             // Tìm title và link một cách linh hoạt
-            const aTag = $(el).find(source.link_selector).length > 0 ? $(el).find(source.link_selector) : $(el).find('a').first();
+            let aTag = $(el).find(source.link_selector);
+            if (aTag.length === 0) aTag = $(el).find('a').first();
+            
             let title = $(el).find(source.title_selector).text().trim();
-            if (!title || title.length < 5) title = aTag.text().trim();
+            
+            // Xóa rác HTML nếu trang web bị lỗi escape (ví dụ trả về &lt;img...&gt;)
+            if (title) {
+                title = title.replace(/<[^>]*>?/gm, '').trim();
+            }
+
+            // Fallback 1: Lấy từ thẻ A
+            if (!title || title.length < 5) {
+                title = aTag.text().replace(/<[^>]*>?/gm, '').trim();
+            }
+            
+            // Fallback 2: Lấy thuộc tính alt hoặc title của thẻ A / IMG
+            if (!title || title.length < 5) {
+                title = aTag.attr('title') || aTag.find('img').attr('alt') || $(el).find('img').attr('alt') || '';
+                title = title.replace(/<[^>]*>?/gm, '').trim();
+            }
             
             const link = aTag.attr('href');
 
-            if (title && link && title.length > 10) {
+            if (title && link && title.length > 5 && !title.startsWith('http')) {
                 const fullLink = link.startsWith('http') ? link : 
                                  link.startsWith('//') ? `https:${link}` :
                                  `https://${source.name.replace('www.', '')}${link.startsWith('/') ? '' : '/'}${link}`;
